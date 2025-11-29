@@ -3,37 +3,329 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Location Tracker</title>
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  integrity="sha256-sA+eJmCfMviwQ/8eCQGx5KPeKk+Zh0fDT6u5pHQmf+A="
-  crossorigin=""
-/>
+<title>Styled Location Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: white;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
     text-align: center;
   }
-  #map {
-    height: 400px;
-    margin-top: 20px;
-    border: 2px solid #444;
+  h1 {
+    font-size: 2.8em;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    background: linear-gradient(45deg, #fff, #f0f0f0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .controls {
+    margin: 30px 0;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
   }
   button {
-    padding: 10px 20px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 2px solid rgba(255,255,255,0.3);
+    padding: 15px 25px;
     font-size: 16px;
+    border-radius: 50px;
     cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+  }
+  button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    transition: left 0.5s;
+  }
+  button:hover::before {
+    left: 100%;
+  }
+  button:hover {
+    background: rgba(255,255,255,0.3);
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
   }
   #status {
-    margin-top: 15px;
+    margin: 20px 0;
+    font-size: 1.3em;
     font-weight: bold;
+    min-height: 40px;
+    padding: 15px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+  }
+  #coords {
+    background: rgba(0,0,0,0.3);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px 0;
+    font-family: 'Courier New', monospace;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  #map {
+    height: 550px;
+    margin-top: 20px;
+    border-radius: 20px;
+    border: 4px solid rgba(255,255,255,0.2);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    position: relative;
+    overflow: hidden;
+  }
+  .map-theme {
+    transition: all 0.5s ease;
+  }
+  #themeToggle {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 1000;
   }
 </style>
 </head>
 <body>
-<h1>Real-Time Location Tracker</h1>
+<div class="container">
+  <h1>🌍 Enhanced Location Tracker</h1>
+  <div class="controls">
+    <button id="detectBtn">🔍 Detect Location</button>
+    <button id="trackBtn">▶️ Start Tracking</button>
+    <button id="stopBtn" disabled>⏹️ Stop Tracking</button>
+    <button id="themeToggle">🌙 Dark Theme</button>
+  </div>
+  <div id="status">Ready to track your location!</div>
+  <div id="coords"></div>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const status = document.getElementById('status');
+  const coords = document.getElementById('coords');
+  const detectBtn = document.getElementById('detectBtn');
+  const trackBtn = document.getElementById('trackBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const themeToggle = document.getElementById('themeToggle');
+  
+  let map, marker, watchId, isDarkTheme = false;
+  let isTracking = false;
+
+  // Custom marker icon with JS styling
+  const createCustomMarker = (lat, lng) => {
+    const pulseIcon = L.divIcon({
+      className: 'custom-marker',
+      html: `
+        <div style="
+          width: 40px; height: 40px; 
+          background: ${isDarkTheme ? '#ff6b6b' : '#4ecdc4'};
+          border-radius: 50%; 
+          border: 4px solid ${isDarkTheme ? '#ff4757' : '#45b7d1'};
+          box-shadow: 0 0 20px ${isDarkTheme ? '#ff6b6b' : '#4ecdc4'};
+          animation: pulse 2s infinite;
+          position: relative;
+        ">
+          <div style="
+            width: 12px; height: 12px; 
+            background: white; 
+            border-radius: 50%; 
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+          "></div>
+        </div>
+      `,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+
+    return L.marker([lat, lng], { icon: pulseIcon });
+  };
+
+  // Map style configurations
+  const mapStyles = {
+    light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    dark: 'https://cartodb-basemaps-c.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png',
+    satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+  };
+
+  function initMap(lat, lng) {
+    map = L.map('map', {
+      zoomControl: true,
+      attributionControl: true,
+      zoomAnimation: true,
+      fadeAnimation: true,
+      markerZoomAnimation: true
+    }).setView([lat, lng], 16);
+
+    // Load initial map style
+    loadMapStyle(mapStyles.light);
+    
+    // Custom map controls styling
+    map.zoomControl.setPosition('topright');
+    
+    // Add custom marker
+    marker = createCustomMarker(lat, lng);
+    marker.addTo(map).bindPopup(`
+      <div style="text-align: center; font-weight: bold;">
+        <b>📍 You Are Here</b><br>
+        <small>Live GPS Position</small>
+      </div>
+    `).openPopup();
+  }
+
+  function loadMapStyle(styleUrl) {
+    if (map) {
+      map.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) {
+          map.removeLayer(layer);
+        }
+      });
+      
+      L.tileLayer(styleUrl, {
+        maxZoom: 19,
+        attribution: isDarkTheme 
+          ? '© CartoDB | © OpenStreetMap contributors' 
+          : '© OpenStreetMap contributors'
+      }).addTo(map);
+    }
+  }
+
+  function updateLocation(lat, lng, accuracy) {
+    // Animate marker update
+    marker.setLatLng([lat, lng], { animate: true });
+    map.flyTo([lat, lng], 16, { duration: 1.5 });
+    
+    // Update coords with animation
+    coords.style.transform = 'scale(1.05)';
+    coords.innerHTML = `
+      <strong>📍 Live GPS Position:</strong><br>
+      <span style="font-size: 1.2em;">Lat: ${lat.toFixed(6)}°</span><br>
+      <span style="font-size: 1.2em;">Lng: ${lng.toFixed(6)}°</span><br>
+      <span style="color: ${accuracy < 20 ? '#51cf66' : '#ff6b6b'}">
+        📏 Accuracy: ${accuracy.toFixed(0)}m ${accuracy < 20 ? '✅ Excellent' : '⚠️ Fair'}
+      </span>
+    `;
+    setTimeout(() => coords.style.transform = 'scale(1)', 200);
+  }
+
+  function showStatus(message, isError = false) {
+    status.textContent = message;
+    status.style.background = isError 
+      ? 'rgba(255, 107, 107, 0.3)' 
+      : 'rgba(81, 207, 102, 0.3)';
+    status.style.border = isError 
+      ? '2px solid #ff6b6b' 
+      : '2px solid #51cf66';
+  }
+
+  function getLocation(oneTime = true) {
+    if (!navigator.geolocation) {
+      showStatus('❌ Geolocation not supported', true);
+      return;
+    }
+
+    showStatus('🔍 Detecting GPS location...');
+
+    if (oneTime) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          showStatus('✅ Location locked!');
+          updateLocation(latitude, longitude, accuracy);
+          if (!map) initMap(latitude, longitude);
+        },
+        (error) => {
+          const messages = {
+            1: '🚫 Location access denied',
+            2: '📡 GPS signal unavailable', 
+            3: '⏰ Location timeout'
+          };
+          showStatus(messages[error.code] || '❌ Location error', true);
+        },
+        { timeout: 10000, enableHighAccuracy: true, maximumAge: 30000 }
+      );
+    } else {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => updateLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy),
+        (error) => showStatus('Tracking lost signal', true),
+        { timeout: 5000, enableHighAccuracy: true }
+      );
+    }
+  }
+
+  // Event listeners
+  detectBtn.addEventListener('click', () => getLocation(true));
+  
+  trackBtn.addEventListener('click', () => {
+    isTracking = true;
+    trackBtn.disabled = true;
+    stopBtn.disabled = false;
+    showStatus('▶️ Real-time tracking active');
+    getLocation(false);
+  });
+  
+  stopBtn.addEventListener('click', () => {
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    isTracking = false;
+    trackBtn.disabled = false;
+    stopBtn.disabled = true;
+    showStatus('⏹️ Tracking stopped');
+  });
+
+  themeToggle.addEventListener('click', () => {
+    isDarkTheme = !isDarkTheme;
+    themeToggle.textContent = isDarkTheme ? '☀️ Light Theme' : '🌙 Dark Theme';
+    
+    // Recreate marker with new theme
+    if (marker) {
+      map.removeLayer(marker);
+      const currentCenter = map.getCenter();
+      marker = createCustomMarker(currentCenter.lat, currentCenter.lng);
+      marker.addTo(map);
+    }
+    
+    // Switch map style
+    const style = isDarkTheme ? mapStyles.dark : mapStyles.light;
+    loadMapStyle(style);
+    showStatus(isDarkTheme ? '🌙 Dark theme activated' : '☀️ Light theme activated');
+  });
+
+  // Add pulse animation CSS via JS
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.7); }
+      70% { box-shadow: 0 0 0 20px rgba(255,255,255,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+    }
+  `;
+  document.head.appendChild(style);
+</script>
+</body>
+</html>
 <button id="locateBtn">Detect My Location</button>
 <div id="status"></div>
 <div id="map"></div>
