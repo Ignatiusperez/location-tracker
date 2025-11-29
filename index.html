@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Location Tracker</title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-sA+eJmCfMviwQ/8eCQGx5KPeKk+Zh0fDT6u5pHQmf+A="
+  crossorigin=""
+/>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    text-align: center;
+  }
+  #map {
+    height: 400px;
+    margin-top: 20px;
+    border: 2px solid #444;
+  }
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  #status {
+    margin-top: 15px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<h1>Real-Time Location Tracker</h1>
+<button id="locateBtn">Detect My Location</button>
+<div id="status"></div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const status = document.getElementById('status');
+  const locateBtn = document.getElementById('locateBtn');
+  let map, marker;
+
+  function initMap(lat, lng) {
+    // Initialize map centered on user's location
+    map = L.map('map').setView([lat, lng], 13);
+
+    // Use OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Add a marker for user's location
+    marker = L.marker([lat, lng]).addTo(map).bindPopup('You are here').openPopup();
+  }
+
+  function updateMarker(lat, lng) {
+    marker.setLatLng([lat, lng]);
+    map.setView([lat, lng], map.getZoom());
+  }
+
+  function getLocation() {
+    if (!navigator.geolocation) {
+      status.textContent = 'Geolocation is not supported by your browser.';
+      return;
+    }
+    status.textContent = 'Locating…';
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        status.textContent = `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`;
+        if (!map) {
+          initMap(latitude, longitude);
+        } else {
+          updateMarker(latitude, longitude);
+        }
+      },
+      () => {
+        status.textContent = 'Unable to retrieve your location.';
+      }
+    );
+  }
+
+  locateBtn.addEventListener('click', getLocation);
+</script>
+</body>
+</html>
